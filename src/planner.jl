@@ -48,7 +48,6 @@ function search(pomcp::CPOMCPOWPlanner, tree::CPOMCPOWTree, info::Dict{Symbol,An
     all_terminal = true
     # gc_enable(false)
     i = 0
-    max_clip = (max_reward(pomcp.problem) - min_reward(pomcp.problem))/(1-discount(pomcp.problem)) ./ pomcp._tau
     #pomcp._lambda = rand(pomcp.solver.rng, tree.n_costs) .* max_clip # random initialization
     if pomcp.solver.init_λ === nothing
         pomcp._lambda = zeros(Float64, tree.n_costs) # start unconstrained
@@ -79,7 +78,7 @@ function search(pomcp::CPOMCPOWPlanner, tree::CPOMCPOWTree, info::Dict{Symbol,An
         # dual ascent with clipping
         ha = rand(pomcp.solver.rng, select_best(MaxCUCB(0.,0.),CPOWTreeObsNode(tree,1),pomcp._lambda))
         pomcp._lambda += alpha(pomcp.solver.alpha_schedule,i) .*  (tree.cv[ha] - pomcp.budget)
-        pomcp._lambda = min.(max.(pomcp._lambda, 0.), max_clip)
+        pomcp._lambda = min.(max.(pomcp._lambda, 0.), pomcp.solver.max_clip)
         
         # tracking
         if pomcp.solver.search_progress_info

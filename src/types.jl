@@ -126,6 +126,7 @@ Fields:
     init_N::Any                 = 0
     init_C::Any                 = 0.
     init_λ::Union{Nothing,Vector{Float64}} = nothing
+    max_clip::Union{Float64,Vector{Float64}} = Inf
     return_best_cost::Bool      = false # if true, simulate best costs up tree 
     next_action::Any            = RandomActionGenerator(rng)
     default_action::Any         = ExceptionRethrow()
@@ -184,7 +185,7 @@ struct CPOMCPOWTree{B,A,O,RB}
 end
 
 @inline function push_anode!(tree::CPOMCPOWTree{B,A,O}, h::Int, a::A, n::Int=0, v::Float64=0.0, cv::Union{Vector{Float64},Nothing}=nothing,update_lookup=true) where {B,A,O}
-    if cv == nothing
+    if cv === nothing
         cv=zeros(Float64,tree.n_costs)
     end
     anode = length(tree.n) + 1
@@ -239,7 +240,6 @@ mutable struct CPOMCPOWPlanner{P,NBU,C,NA,SE,IN,IV,IC,SolverType} <: Policy
     budget::Vector{Float64}
     _cost_mem::Union{Nothing,Vector{Float64}}
     _lambda::Union{Nothing,Vector{Float64}}
-    _tau::Vector{Float64}
 
 end
 
@@ -256,8 +256,8 @@ function CPOMCPOWPlanner(solver, problem::CPOMDP)
                   nothing,
                   costs_limit(problem),
                   nothing,
-                  nothing,
-                  costs_limit(problem))
+                  nothing
+                  )
 end
 
 Random.seed!(p::CPOMCPOWPlanner, seed) = Random.seed!(p.solver.rng, seed)
