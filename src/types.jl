@@ -141,7 +141,7 @@ struct CPOMCPOWTree{B,A,O,RB}
     # action nodes
     n::Vector{Int}
     v::Vector{Float64}
-    cv::Vector{Vector{Float64}}
+    cv::Vector{Vector{Float64}} # The amount of constraint used at each node <verify>
     generated::Vector{Vector{Pair{O,Int}}} #triple? is this obs,reward or obs, sp
     a_child_lookup::Dict{Tuple{Int,O}, Int} # may not be maintained based on solver params
     a_labels::Vector{A}
@@ -153,6 +153,9 @@ struct CPOMCPOWTree{B,A,O,RB}
     tried::Vector{Vector{Int}}
     o_child_lookup::Dict{Tuple{Int,A}, Int} # may not be maintained based on solver params
     o_labels::Vector{O}
+
+    # lambda
+    lambda::Vector{Vector{Float64}} # A lambda vector for each node
 
     # root
     root_belief::RB
@@ -176,6 +179,8 @@ struct CPOMCPOWTree{B,A,O,RB}
             sizehint!(Vector{Int}[Int[]], sz),
             Dict{Tuple{Int,A}, Int}(),
             sizehint!(Array{O}(undef, 1), sz),
+
+            sizehint!(Vector{Vector{Float64}}[], sz),
 
             root_belief,
             Dict{Int,Vector{Float64}}(),
@@ -240,10 +245,10 @@ mutable struct CPOMCPOWPlanner{P,NBU,C,NA,SE,IN,IV,IC,SolverType} <: Policy
     budget::Vector{Float64}
     _cost_mem::Union{Nothing,Vector{Float64}}
     _lambda::Union{Nothing,Vector{Float64}}
-
+    plus_flag::Bool
 end
 
-function CPOMCPOWPlanner(solver, problem::CPOMDP)
+function CPOMCPOWPlanner(solver, problem::CPOMDP, plus::Bool = false)
     CPOMCPOWPlanner(solver,
                   problem,
                   solver.node_sr_belief_updater,
@@ -256,7 +261,8 @@ function CPOMCPOWPlanner(solver, problem::CPOMDP)
                   nothing,
                   costs_limit(problem),
                   nothing,
-                  nothing
+                  nothing,
+                  plus
                   )
 end
 

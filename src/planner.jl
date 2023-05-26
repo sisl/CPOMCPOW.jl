@@ -69,7 +69,7 @@ function search(pomcp::CPOMCPOWPlanner, tree::CPOMCPOWTree, info::Dict{Symbol,An
         s = rand(pomcp.solver.rng, tree.root_belief)
         if !POMDPs.isterminal(pomcp.problem, s)
             max_depth = min(pomcp.solver.max_depth, ceil(Int, log(pomcp.solver.eps)/log(discount(pomcp.problem))))
-            simulate(pomcp, CPOWTreeObsNode(tree, 1), s, max_depth)
+            simulate(pomcp, CPOWTreeObsNode(tree, 1), s, max_depth, pomcp.budget)
             all_terminal = false
         else
             continue
@@ -113,7 +113,7 @@ function search(pomcp::CPOMCPOWPlanner, tree::CPOMCPOWTree, info::Dict{Symbol,An
     return select_best(pomcp.solver.final_criterion, CPOWTreeObsNode(tree,1), pomcp._lambda)
 end
 
-function simulate(pomcp::CPOMCPOWPlanner, h_node::CPOWTreeObsNode{B,A,O}, s::S, d) where {B,S,A,O}
+function simulate(pomcp::CPOMCPOWPlanner, h_node::CPOWTreeObsNode{B,A,O}, s::S, d, budget::Vector{Float64}) where {B,S,A,O}
 
     tree = h_node.tree
     h = h_node.node
@@ -159,7 +159,8 @@ function simulate(pomcp::CPOMCPOWPlanner, h_node::CPOWTreeObsNode{B,A,O}, s::S, 
     end
     total_n = tree.total_n[h]
 
-    best_node = rand(sol.rng, select_best(pomcp.criterion, h_node, pomcp._lambda))
+    node_lambda = tree.lambda[h]; # Using Infiltrator, check that the tree size is 
+    best_node = rand(sol.rng, select_best(pomcp.criterion, h_node, node_lambda)) # <-- here, I should be passing in the node_lambda
     a = tree.a_labels[best_node]
 
     new_node = false
@@ -178,6 +179,7 @@ function simulate(pomcp::CPOMCPOWPlanner, h_node::CPOWTreeObsNode{B,A,O}, s::S, 
             push!(tree.total_n, 0)
             push!(tree.tried, Int[])
             push!(tree.o_labels, o)
+            push!(tree.lambda, tree.lambda[h]) # <-- For a new node, we push the lambda of its parent initially.
 
             if sol.check_repeat_obs
                 tree.a_child_lookup[(best_node, o)] = hao
@@ -201,10 +203,11 @@ function simulate(pomcp::CPOMCPOWPlanner, h_node::CPOWTreeObsNode{B,A,O}, s::S, 
         pair = rand(sol.rng, tree.generated[best_node])
         o = pair.first
         hao = pair.second
-        push_weighted!(tree.sr_beliefs[hao], pomcp.node_sr_belief_updater, s, sp, r, c)
-        sp, r, c = rand(sol.rng, tree.sr_beliefs[hao])
+        push_weighted!(tree.sr_beliefs[hao], pomcp.node_sr_belief_updater, s, sp, r, c) # <-- updates belief
+        sp, r, c = rand(sol.rng, tree.sr_beliefs[hao]) # <--- Takes a particle
 
-        v, cv = simulate(pomcp, CPOWTreeObsNode(tree, hao), sp, d-1)
+        child_budget = (budget - tree.cv[h])/discount(p.problem) # what is \bar{c} ha?
+        v, cv = simulate(pomcp, CPOWTreeObsNode(tree, hao), sp, d-1, child_budget) # budget = (budget - t.top_level_costs[ha])/discount(p.problem)
     end
     R = r + POMDPs.discount(pomcp.problem)*v
     C = c + POMDPs.discount(pomcp.problem)*cv
@@ -226,6 +229,9 @@ function simulate(pomcp::CPOMCPOWPlanner, h_node::CPOWTreeObsNode{B,A,O}, s::S, 
             tree.top_level_costs[best_node] += (c-tree.top_level_costs[best_node])/tree.n[best_node]
         end
     end
+
+    tree.lambda[h] += alpha(pomcp.solver.alpha_schedule, tree.n[h]) .*  (tree.cv[h] - budget)
+    tree.lambda[h] = min.(max.(tree.lambda[h], 0.), pomcp.solver.max_clip) # Some clipping
 
     if sol.return_best_cost
         LC = dot(pomcp._lambda .+ 1e-3, C)
