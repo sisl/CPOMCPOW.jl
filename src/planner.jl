@@ -48,11 +48,14 @@ function search(pomcp::CPOMCPOWPlanner, tree::CPOMCPOWTree, info::Dict{Symbol,An
     all_terminal = true
     # gc_enable(false)
     i = 0
-    #pomcp._lambda = rand(pomcp.solver.rng, tree.n_costs) .* max_clip # random initialization
+
     if pomcp.solver.init_λ === nothing
         pomcp._lambda = zeros(Float64, tree.n_costs) # start unconstrained
     else
         pomcp._lambda = pomcp.solver.init_λ
+    end
+    if (tree.lambda.size() == 0)
+        push!(tree.lambda, pomcp._lambda)
     end
     t0 = timer()
 
@@ -74,15 +77,15 @@ function search(pomcp::CPOMCPOWPlanner, tree::CPOMCPOWTree, info::Dict{Symbol,An
         else
             continue
         end
-
+        
         # dual ascent with clipping
-        ha = rand(pomcp.solver.rng, select_best(MaxCUCB(0.,0.),CPOWTreeObsNode(tree,1),pomcp._lambda))
-        pomcp._lambda += alpha(pomcp.solver.alpha_schedule,i) .*  (tree.cv[ha] - pomcp.budget)
-        pomcp._lambda = min.(max.(pomcp._lambda, 0.), pomcp.solver.max_clip)
+        ha = rand(pomcp.solver.rng, select_best(MaxCUCB(0.,0.),CPOWTreeObsNode(tree,1), tree.lambda[1]))
+        # pomcp._lambda += alpha(pomcp.solver.alpha_schedule,i) .*  (tree.cv[ha] - pomcp.budget)
+        # pomcp._lambda = min.(max.(pomcp._lambda, 0.), pomcp.solver.max_clip)
         
         # tracking
         if pomcp.solver.search_progress_info
-            push!(info[:lambda], pomcp._lambda)
+            push!(info[:lambda], tree.lambda[ha])
             push!(info[:v_taken], tree.v[ha])
             push!(info[:cv_taken], tree.cv[ha])
 
@@ -110,7 +113,7 @@ function search(pomcp::CPOMCPOWPlanner, tree::CPOMCPOWTree, info::Dict{Symbol,An
         throw(AllSamplesTerminal(tree.root_belief))
     end
 
-    return select_best(pomcp.solver.final_criterion, CPOWTreeObsNode(tree,1), pomcp._lambda)
+    return select_best(pomcp.solver.final_criterion, CPOWTreeObsNode(tree,1), tree.lambda[1])
 end
 
 function simulate(pomcp::CPOMCPOWPlanner, h_node::CPOWTreeObsNode{B,A,O}, s::S, d, budget::Vector{Float64}) where {B,S,A,O}
@@ -159,7 +162,7 @@ function simulate(pomcp::CPOMCPOWPlanner, h_node::CPOWTreeObsNode{B,A,O}, s::S, 
     end
     total_n = tree.total_n[h]
 
-    node_lambda = tree.lambda[h]; # Using Infiltrator, check that the tree size is 
+    node_lambda = tree.lambda[h]; # best_node is ha in the pseudocode
     best_node = rand(sol.rng, select_best(pomcp.criterion, h_node, node_lambda)) # <-- here, I should be passing in the node_lambda
     a = tree.a_labels[best_node]
 
@@ -179,7 +182,8 @@ function simulate(pomcp::CPOMCPOWPlanner, h_node::CPOWTreeObsNode{B,A,O}, s::S, 
             push!(tree.total_n, 0)
             push!(tree.tried, Int[])
             push!(tree.o_labels, o)
-            push!(tree.lambda, tree.lambda[h]) # <-- For a new node, we push the lambda of its parent initially.
+            new_lambda = deepcopy(tree.lambda[h])
+            push!(tree.lambda, new_lambda) # <-- For a new node, we push the lambda of its parent initially.
 
             if sol.check_repeat_obs
                 tree.a_child_lookup[(best_node, o)] = hao
@@ -206,7 +210,7 @@ function simulate(pomcp::CPOMCPOWPlanner, h_node::CPOWTreeObsNode{B,A,O}, s::S, 
         push_weighted!(tree.sr_beliefs[hao], pomcp.node_sr_belief_updater, s, sp, r, c) # <-- updates belief
         sp, r, c = rand(sol.rng, tree.sr_beliefs[hao]) # <--- Takes a particle
 
-        child_budget = (budget - tree.cv[h])/discount(p.problem) # what is \bar{c} ha?
+        child_budget = (budget - tree.top_level_costs[best_node])/discount(p.problem) # what is \bar{c} ha?
         v, cv = simulate(pomcp, CPOWTreeObsNode(tree, hao), sp, d-1, child_budget) # budget = (budget - t.top_level_costs[ha])/discount(p.problem)
     end
     R = r + POMDPs.discount(pomcp.problem)*v
@@ -230,7 +234,7 @@ function simulate(pomcp::CPOMCPOWPlanner, h_node::CPOWTreeObsNode{B,A,O}, s::S, 
         end
     end
 
-    tree.lambda[h] += alpha(pomcp.solver.alpha_schedule, tree.n[h]) .*  (tree.cv[h] - budget)
+    tree.lambda[h] += alpha(pomcp.solver.alpha_schedule, tree.n[best_node]) .*  (tree.cv[best_node] - budget) # tree.n[best_node or h?]
     tree.lambda[h] = min.(max.(tree.lambda[h], 0.), pomcp.solver.max_clip) # Some clipping
 
     if sol.return_best_cost
