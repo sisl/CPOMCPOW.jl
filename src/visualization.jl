@@ -37,23 +37,11 @@ function D3Trees.D3Tree(t::CPOMCPOWTree; title="CPOMCPOW Tree", kwargs...)
                            b==1 ? "<root>" : node_tag(t.o_labels[b]),
                            t.total_n[b]
                           )
-        
-        if length(t.lambda) == 1
-            tt[b] = """
-                    o: $(b==1 ? "<root>" : node_tag(t.o_labels[b]))
-                    N: $(t.total_n[b])
-                    $(length(t.children[b])) children
-                    $(b==1 ? "l: $(t.lambda[b])" : "")
-                    """
-
-        else
-            tt[b] = """
-                    o: $(b==1 ? "<root>" : node_tag(t.o_labels[b]))
-                    N: $(t.total_n[b])
-                    $(length(t.children[b])) children
-                    l : $(t.lambda[b])
-                    """
-        end
+        tt[b] = """
+                o: $(b==1 ? "<root>" : node_tag(t.o_labels[b]))
+                N: $(t.total_n[b])
+                $(length(t.tried[b])) children
+                """
         link_width = max(1.0, 20.0*sqrt(t.total_n[b]/t.total_n[1]))
         link_style[b] = "stroke-width:$link_width"
     end

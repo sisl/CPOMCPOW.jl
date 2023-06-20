@@ -97,6 +97,8 @@ Fields:
     if this method is not implemented, `a` will be returned directly.
 - `timer::Function`:
     Timekeeping method. Search iterations ended when `timer() - start_time ≥ max_time`.
+- `plus_flag::Bool`:
+    Option to propagate the lambda vector down the tree as well
 """
 @with_kw mutable struct CPOMCPOWSolver{RNG<:AbstractRNG,T} <: Solver
     eps::Float64                = 0.01
@@ -131,6 +133,7 @@ Fields:
     next_action::Any            = RandomActionGenerator(rng)
     default_action::Any         = ExceptionRethrow()
     timer::T                    = () -> 1e-9*time_ns()
+    plus_flag::Bool             = false
 end
 
 # unweighted ParticleCollections don't get anything pushed to them
@@ -245,10 +248,9 @@ mutable struct CPOMCPOWPlanner{P,NBU,C,NA,SE,IN,IV,IC,SolverType} <: Policy
     budget::Vector{Float64}
     _cost_mem::Union{Nothing,Vector{Float64}}
     _lambda::Union{Nothing,Vector{Float64}}
-    plus_flag::Bool
 end
 
-function CPOMCPOWPlanner(solver, problem::CPOMDP, plus::Bool = false)
+function CPOMCPOWPlanner(solver, problem::CPOMDP)
     CPOMCPOWPlanner(solver,
                   problem,
                   solver.node_sr_belief_updater,
@@ -262,7 +264,6 @@ function CPOMCPOWPlanner(solver, problem::CPOMDP, plus::Bool = false)
                   costs_limit(problem),
                   nothing,
                   nothing,
-                  plus
                   )
 end
 
