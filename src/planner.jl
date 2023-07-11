@@ -2,7 +2,6 @@ dot(a::Vector,b::Vector) = sum(a .* b)
 
 function action_info(pomcp::CPOMCPOWPlanner{P,NBU}, b; tree_in_info=false) where {P,NBU}
     sol = pomcp.solver
-    println("asdf: Return best cost was set to $(sol.return_best_cost) and lambda prop is $(sol.plus_flag)")
     A = actiontype(P)
     info = Dict{Symbol, Any}()
     tree = make_tree(pomcp, b)
