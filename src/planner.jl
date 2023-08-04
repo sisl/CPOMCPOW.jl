@@ -124,11 +124,49 @@ function search(pomcp::CPOMCPOWPlanner, tree::CPOMCPOWTree, info::Dict{Symbol,An
         throw(AllSamplesTerminal(tree.root_belief))
     end
 
-    if sol.plus_flag
-        return select_best(pomcp.solver.final_criterion, CPOWTreeObsNode(tree,1), tree.lambda[1])
+    tree = CPOWTreeObsNode(tree,1).tree #h_node.tree
+    h = CPOWTreeObsNode(tree,1).node #h_node.node
+
+    cv = reduce(vcat, copy(tree.cv[tree.tried[h]]))
+    v = copy(tree.v[tree.tried[h]])
+
+    threshold = pomcp.budget[1]
+    mask = [cost < threshold ? 1 : 0 for cost in cv]
+    filtered_R = v[mask .== 1]
+
+    if isempty(filtered_R)
+        if sol.plus_flag
+            return select_best(pomcp.solver.final_criterion, CPOWTreeObsNode(tree,1), tree.lambda[1])
+        else
+            return select_best(pomcp.solver.final_criterion, CPOWTreeObsNode(tree,1), pomcp._lambda)
+        end
     else
-        return select_best(pomcp.solver.final_criterion, CPOWTreeObsNode(tree,1), pomcp._lambda)
+        max_value = maximum(filtered_R)
+        best_nodes = findall(x -> x == max_value, v)
+        if length(best_nodes) == 1
+            weights = [1.0]
+        else
+            weights = solve_lp(tree, best_nodes)
+        end
+        return SparseCat(best_nodes, weights) 
     end
+
+    # max_value = maximum(v[mask .== 1])
+    # best_nodes = findall(x -> x == max_value, v)
+
+    # if length(best_nodes) == 1
+    #     weights = [1.0]
+    # else
+    #     weights = solve_lp(tree, best_nodes)
+    # end
+    # return SparseCat(best_nodes, weights) 
+
+    # if sol.plus_flag
+    #     return select_best(pomcp.solver.final_criterion, CPOWTreeObsNode(tree,1), tree.lambda[1])
+    # else
+    #     return select_best(pomcp.solver.final_criterion, CPOWTreeObsNode(tree,1), pomcp._lambda)
+    # end
+
 end
 
 function simulate(pomcp::CPOMCPOWPlanner, h_node::CPOWTreeObsNode{B,A,O}, s::S, d, budget::Vector{Float64}) where {B,S,A,O}
