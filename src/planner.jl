@@ -134,12 +134,21 @@ function search(pomcp::CPOMCPOWPlanner, tree::CPOMCPOWTree, info::Dict{Symbol,An
     mask = [cost < threshold ? 1 : 0 for cost in cv]
     filtered_R = v[mask .== 1]
 
-    if isempty(filtered_R)
-        if sol.plus_flag
-            return select_best(pomcp.solver.final_criterion, CPOWTreeObsNode(tree,1), tree.lambda[1])
+    # if isempty(filtered_R) #for no predicted safe action, use lambda
+    #     if sol.plus_flag
+    #         return select_best(pomcp.solver.final_criterion, CPOWTreeObsNode(tree,1), tree.lambda[1])
+    #     else
+    #         return select_best(pomcp.solver.final_criterion, CPOWTreeObsNode(tree,1), pomcp._lambda)
+    #     end
+    if isempty(filtered_R) #for no predicted safe action, take safest action
+        min_cost = minimum(cv)
+        best_nodes = findall(x -> x == min_cost, cv)
+        if length(best_nodes) == 1
+            weights = [1.0]
         else
-            return select_best(pomcp.solver.final_criterion, CPOWTreeObsNode(tree,1), pomcp._lambda)
+            weights = solve_lp(tree, best_nodes)
         end
+        return SparseCat(best_nodes, weights) 
     else
         max_value = maximum(filtered_R)
         best_nodes = findall(x -> x == max_value, v)
@@ -151,6 +160,7 @@ function search(pomcp::CPOMCPOWPlanner, tree::CPOMCPOWTree, info::Dict{Symbol,An
         return SparseCat(best_nodes, weights) 
     end
 
+    #Bug: ([1 2 3] does not behave as [1, 2, 3])
     # max_value = maximum(v[mask .== 1])
     # best_nodes = findall(x -> x == max_value, v)
 
@@ -160,6 +170,8 @@ function search(pomcp::CPOMCPOWPlanner, tree::CPOMCPOWTree, info::Dict{Symbol,An
     #     weights = solve_lp(tree, best_nodes)
     # end
     # return SparseCat(best_nodes, weights) 
+
+    #Lambda Solver 
 
     # if sol.plus_flag
     #     return select_best(pomcp.solver.final_criterion, CPOWTreeObsNode(tree,1), tree.lambda[1])
