@@ -16,7 +16,10 @@ using BasicPOMCP: convert_estimator
 import Base: insert!
 import POMDPs: action, solve, mean, rand, updater, update, initialize_belief, currentobs, history
 import POMDPTools: action_info
+
 import MCTS: n_children, next_action, isroot, node_tag, tooltip_tag, estimate_value
+using POMDPLinter: @show_requirements, requirements_info, @POMDP_require, @req, @subreq
+import POMDPLinter
 
 export
     CPOMCPOWSolver,
