@@ -1,4 +1,5 @@
 dot(a::Vector,b::Vector) = sum(a .* b)
+dot(a::Tuple,b::Tuple) = sum(a .* b)
 
 function action_info(pomcp::CPOMCPOWPlanner{P,NBU}, b; tree_in_info=false) where {P,NBU}
     A = actiontype(P)
@@ -9,9 +10,17 @@ function action_info(pomcp::CPOMCPOWPlanner{P,NBU}, b; tree_in_info=false) where
     try
         policy = search(pomcp, tree, info)
         info[:policy] = policy
-        a = tree.a_labels[rand(pomcp.solver.rng,policy)]
-        tlcs = map(i->tree.top_level_costs[i],policy.vals)
-        pomcp._cost_mem = dot(tlcs,policy.probs)
+
+        # take random action from resulting best policy and adjust one-step cost memory
+        a_node = rand(pomcp.solver.rng, policy)
+        a = tree.a_labels[a_node]
+
+        # probabilistic cost accrued
+        # tlc = map(i->tree.top_level_costs[i], support(policy))
+        # pomcp._cost_mem = tlc[1] if length(tlc)==1 else dot(tlc, policy.probs)
+
+        # deterministic cost accrued
+        pomcp._cost_mem = tree.top_level_costs[a_node]
         if pomcp.solver.tree_in_info || tree_in_info
             info[:tree] = tree
         end
@@ -281,19 +290,17 @@ function select_best(crit::MaxCUCB, h_node::CPOWTreeObsNode, lambda::Vector{Floa
         val_diff = best_criterion_val .- criterion_values
         next_best_nodes = tree.tried[h][0 .< val_diff .< crit.nu]
         append!(best_nodes, next_best_nodes)
+        @warn("""
+         With ν > 0, the default stochastic policy evenly weighs all actions within ν of armgax Q_λ. 
+         See $(@__FILE__) and implement a new method for different special behavior in this case (e.g. the LP of CC-POMCP).
+         """, maxlog=1)
     end
 
     # weigh actions
     if length(best_nodes) == 1
-        weights = [1.0]
+        dist = Deterministic(best_nodes[1])
     else
-        weights = solve_lp(tree, best_nodes)
+        dist = SparseCat(best_nodes, ones(Float64, length(best_nodes)) / length(best_nodes))
     end
-    return SparseCat(best_nodes, weights)  
-end
-
-function solve_lp(t::CPOMCPOWTree, best_nodes::Vector{Int})
-    # error("Multiple CPOMCP best actions not implemented")
-    # random for now
-    return ones(Float64, length(best_nodes)) / length(best_nodes)
+    return dist
 end

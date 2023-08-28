@@ -102,7 +102,7 @@ Fields:
     eps::Float64                = 0.01
     max_depth::Int              = typemax(Int)
     criterion                   = MaxCUCB(1.0,0.0) # c,nu
-    final_criterion             = MaxCUCB(0.0,0.1) # c,nu
+    final_criterion             = MaxCUCB(0.0,0.0) # c,nu
     tree_queries::Int           = 1000
     max_time::Float64           = Inf
     rng::RNG                    = Random.GLOBAL_RNG
